@@ -1,0 +1,166 @@
+---
+title: "Review In Class"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library('nycflights13') # install.packages('nycflights13')
+library('tidyverse')
+library('lubridate')
+library('caret')
+
+airlines = airlines
+airports = airports
+planes = planes
+weather = weather
+```
+
+Based off of: <https://r4ds.had.co.nz/relational-data.html>
+![](https://d33wubrfki0l68.cloudfront.net/245292d1ea724f6c3fd8a92063dcd7bfb9758d02/5751b/diagrams/relational-nycflights.png)
+
+
+```{r}
+head(airlines)
+```
+
+
+```{r}
+head(airports)
+```
+
+```{r}
+head(planes)
+```
+
+
+```{r}
+head(weather)
+```
+
+
+Join `weather` and `airports` (will need some intermediate steps)  
+
+```{r}
+weather_airports = flights %>%
+  left_join(airports, by = c('origin' = 'faa')) %>%
+  left_join(weather, by = c('year', 'month', 'day', 'hour', 'origin'))
+```
+
+
+From the `weather_airports` data you created (via joining tables). Find the average `distance` the `carrier` `UA` flies whose `origin` is `JFK`
+```{r}
+weather_airports %>%
+  filter(carrier == 'UA') %>%
+  filter(origin == 'JFK') %>%
+  summarize(mean(distance))
+```
+
+
+Similar to the previous statement, calculate the average `distance` of each `carrier` whose `origin` is `JFK` and display them from highest to lowest.
+```{r}
+weather_airports %>%
+  filter(origin == 'JFK') %>%
+  group_by(carrier) %>%
+  summarize(mean_distance = mean(distance)) %>%
+  arrange(-mean_distance)
+```
+
+Display a plot of the top 5 `carrier` that flew the greatest overall distance in March of 2013, result should show `carrier` as well as `total_distance`
+```{r}
+weather_airports %>%
+  filter(month == 3) %>%
+  filter(year == 2013) %>%
+  group_by(carrier) %>%
+  summarize(total_distance = sum(distance)) %>%
+  arrange(-total_distance) %>%
+  head(5)
+```
+
+
+Which `planes` `model` was the most common in `year` 2004?
+```{r}
+planes %>%
+  filter(year == 2004) %>%
+  group_by(model) %>%
+  count() %>%
+  arrange(-n) %>%
+  head(1)
+```
+
+Show a histogram with 20 bins of the `hour` from `flights`.
+```{r}
+flights %>%
+  ggplot(aes(x = hour)) +
+  geom_histogram(bins = 20)
+```
+
+
+Make a scatter plot of average `day` `average_distance` from `flights` with the x-axis as `carrier` `UA` and y-axis as `carrier` `AA`
+```{r}
+flights %>%
+  filter(carrier == 'UA' | carrier == 'AA') %>%
+  group_by(carrier, day) %>%
+  summarize(average_distance = mean(distance)) %>%
+  select(day, carrier, average_distance) %>%
+  spread(key = carrier, value = average_distance) %>%
+  ggplot(aes(x = UA, y = AA)) + 
+  geom_point()
+```
+
+
+Create a linear model between `dep_delay` and `arr_delay` where `arr_delay` is the target variable.
+```{r}
+mod = lm(arr_delay ~ dep_delay, data = flights)
+mod
+```
+
+To the lay person, describe what the coefficients from your model mean?
+
+<Write your answer here>
+
+
+Assume all data is already cleaned. From the `planes` table, using `year`, `engine`, and `seats` - build a model to predict `manufacturer` (filtered for you). Describe your model and interpret your results.
+```{r}
+dat_id = planes %>% 
+  filter(manufacturer %in% c('BOEING', 'AIRBUS INDUSTRIE', 'BOMBARDIER INC', 'AIRBUS', 'EMBRAER')) %>%
+  select(year, engine, engines, seats, manufacturer) %>%
+  drop_na() %>%
+  mutate(id = row_number(), Class = as.factor(manufacturer),
+         engine = as.factor(engine)) %>%
+  select(-manufacturer)
+
+dat_train = dat_id %>%
+  sample_frac(0.9)
+
+dat_test = dat_id %>%
+  anti_join(dat_train, by = 'id') %>%
+  select(-id)
+
+dat_train = dat_train %>% select(-id)
+
+dat_train_up = upSample(dat_train %>% select(-Class), dat_train$Class)
+
+train_control = trainControl(method = 'cv', number = 2)
+
+model_rf = train(
+  Class ~ .,
+  data = dat_train_up,
+  method = 'rf',
+  trControl = train_control
+)
+
+model_rf
+```
+
+```{r}
+varImp(model_rf)
+```
+
+```{r}
+predictions = predict(model_rf, dat_test)
+confusionMatrix(predictions, dat_test$Class)
+```
+
+
