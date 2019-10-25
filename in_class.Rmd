@@ -1,0 +1,105 @@
+---
+title: "Review In Class"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library('nycflights13') # install.packages('nycflights13')
+library('tidyverse')
+library('lubridate')
+library('caret')
+
+airlines = airlines
+airports = airports
+planes = planes
+weather = weather
+```
+
+Based off of: <https://r4ds.had.co.nz/relational-data.html>
+![](https://d33wubrfki0l68.cloudfront.net/245292d1ea724f6c3fd8a92063dcd7bfb9758d02/5751b/diagrams/relational-nycflights.png)
+
+
+```{r}
+head(airlines)
+```
+
+
+```{r}
+head(airports)
+```
+
+```{r}
+head(planes)
+```
+
+
+```{r}
+head(weather)
+```
+
+
+Join `weather` and `airports` (will need some intermediate steps)  
+
+```{r}
+weather_airports <- ...
+```
+
+
+From the `weather_airports` data you created (via joining tables). Find the average `distance` the `carrier` `UA` flies whose `origin` is `JFK`
+```{r}
+
+```
+
+
+Similar to the previous statement, calculate the average `distance` of each `carrier` whose `origin` is `JFK` and display them from highest to lowest.
+```{r}
+
+```
+
+Display a plot of the top 5 `carrier` that flew the greatest overall distance in March of 2013, result should show `carrier` as well as `total_distance`
+```{r}
+
+```
+
+
+Which `planes` `model` was the most common in `year` 2004?
+```{r}
+
+```
+
+Show a histogram with 20 bins of the `hour` from `flights`.
+```{r}
+
+```
+
+
+Make a scatter plot of average `day` `average_distance` from `flights` with the x-axis as `carrier` `UA` and y-axis as `carrier` `AA`
+```{r}
+
+```
+
+
+Create a linear model between `dep_delay` and `arr_delay` where `arr_delay` is the target variable.
+```{r}
+
+```
+
+To the lay person, describe what the coefficients from your model mean?
+
+<Write your answer here>
+
+
+Assume all data is already cleaned. From the `planes` table, using `year`, `engine`, and `seats` - build a model to predict `manufacturer` (filtered for you). Describe your model and interpret your results.
+```{r}
+clean_data <- planes %>% 
+  filter(manufacturer %in% c('BOEING', 'AIRBUS INDUSTRIE', 'BOMBARDIER INC', 'AIRBUS', 'EMBRAER')) %>%
+  ...
+```
+
+
+
+
+
+
