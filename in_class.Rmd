@@ -6,15 +6,19 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library('nycflights13') # install.packages('nycflights13')
+library('nycflights13')
+#install.packages('nycflights13')
 library('tidyverse')
 library('lubridate')
 library('caret')
+library("rpart")
+#install.packages("rpart")
 
 airlines = airlines
 airports = airports
 planes = planes
 weather = weather
+
 ```
 
 Based off of: <https://r4ds.had.co.nz/relational-data.html>
@@ -43,63 +47,241 @@ head(weather)
 Join `weather` and `airports` (will need some intermediate steps)  
 
 ```{r}
-weather_airports <- ...
+weather_airports <-  flights %>% 
+  left_join(weather, by = c("origin", "year", "month", "day", "hour")) %>% 
+  left_join(airports, by = c("origin" = "faa"))
+weather_airports
 ```
 
 
 From the `weather_airports` data you created (via joining tables). Find the average `distance` the `carrier` `UA` flies whose `origin` is `JFK`
 ```{r}
-
+weather_airports %>% 
+  filter(origin == "JFK") %>% 
+  filter(carrier == "UA") %>% 
+  summarise(Avg_Dist = mean(distance))
 ```
 
 
 Similar to the previous statement, calculate the average `distance` of each `carrier` whose `origin` is `JFK` and display them from highest to lowest.
 ```{r}
-
+weather_airports %>% 
+  filter(origin == "JFK") %>% 
+  group_by(carrier) %>% 
+  summarise(Avg_Dist = mean(distance)) %>% 
+  arrange(desc(Avg_Dist))
 ```
 
 Display a plot of the top 5 `carrier` that flew the greatest overall distance in March of 2013, result should show `carrier` as well as `total_distance`
 ```{r}
+weather_airports %>% 
+  filter(year == 2013, month == 3) %>% 
+  group_by(carrier) %>% 
+  summarise(total_distance = sum(distance)) %>% 
+  arrange(-total_distance) %>%
+  head(5) %>% 
+  ggplot(aes(x=carrier, y=total_distance)) +
+  geom_col()
+  
+weather_airports %>%
+   filter(year == 2013, month == 3) %>%
+   group_by(carrier) %>%
+   summarise(total_distance = sum(distance)) %>%
+   top_n(5, total_distance) %>%
+   ggplot(aes(x=fct_reorder(carrier, total_distance), y=total_distance)) +
+   geom_col() + 
+   coord_flip()
 
 ```
 
 
 Which `planes` `model` was the most common in `year` 2004?
 ```{r}
-
+weather_airports %>% 
+  filter(year == 2004) %>%
+  group_by(model) %>% 
+  summarise(most_common = count(n=n()))
 ```
 
 Show a histogram with 20 bins of the `hour` from `flights`.
 ```{r}
-
+flights %>% 
+  ggplot(aes(x=hour)) +
+  geom_histogram(bins = 20)
 ```
 
 
 Make a scatter plot of average `day` `average_distance` from `flights` with the x-axis as `carrier` `UA` and y-axis as `carrier` `AA`
 ```{r}
+flights %>% 
+  filter(carrier == "UA" | carrier == "AA") %>% 
+  group_by(carrier, day) %>%
+  summarise(Avg_Dist = mean(distance)) %>% 
+  spread(key=carrier, value = Avg_Dist) %>% 
+  ggplot(aes(x = UA, y = AA)) +
+  geom_point() +
+  geom_smooth(method = "lm")
 
+
+flights %>%
+  filter(carrier == 'UA' | carrier == 'AA') %>%
+  group_by(carrier, day) %>%
+  summarize(avg_dist = mean(distance)) %>%
+  spread(key = carrier, value = avg_dist) %>%
+  ggplot(aes(x = UA, y = AA)) + 
+  geom_point() +
+  geom_smooth()
 ```
 
 
-Create a linear model between `dep_delay` and `arr_delay` where `arr_delay` is the target variable.
-```{r}
-
-```
-
-To the lay person, describe what the coefficients from your model mean?
-
-<Write your answer here>
+##### ----- Homework Assignment Stars Here  ----- #####  
 
 
 Assume all data is already cleaned. From the `planes` table, using `year`, `engine`, and `seats` - build a model to predict `manufacturer` (filtered for you). Describe your model and interpret your results.
 ```{r}
 clean_data <- planes %>% 
   filter(manufacturer %in% c('BOEING', 'AIRBUS INDUSTRIE', 'BOMBARDIER INC', 'AIRBUS', 'EMBRAER')) %>%
-  ...
+  filter(!is.na(year)) %>% 
+  rename(Class = manufacturer) %>% 
+  mutate(Class = as.factor(Class),
+         engine = as.factor(engine),
+         id = row_number(),
+         year = lubridate::as_date(year),
+         year = as.factor(lubridate::year(year))) %>%
+  select(id, Class, year, engine, seats)
+```
+
+```{r}
+colSums(is.na(clean_data))
 ```
 
 
+```{r}
+head(clean_data, 10)
+```
+
+# Function for Split Train / Test  
+```{r}
+split_test_train = function(df, train_pct = 0.70, seed_number = 123){
+  set.seed(seed_number)
+  df_id <- df %>% 
+    mutate(id_2 = row_number())
+  
+  df_train <- df_id %>%
+    sample_frac(train_pct)
+  
+  df_test <- df_id %>%
+    anti_join(df_train, by = 'id_2') %>%
+    select(-id_2, -id)
+  
+  df_train <- df_train %>%
+    select(-id_2, -id)
+  
+  df_split <- list(train = as.data.frame(df_train), test = as.data.frame(df_test))
+  return(df_split)
+}
+```
+
+# Function Call to create the Split Train / Test  
+```{r}
+dat_split <- clean_data %>%
+  split_test_train()
+
+dat_train <- dat_split$train
+dat_test <- dat_split$test
+
+```
+
+# Examine base rate of manufacturer variable.  
+```{r}
+clean_data %>%
+  group_by(Class) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(pct_of_data = n / nrow(clean_data))
+```
+
+# Upsampling of the Class 
+```{r}
+dat_train_up <- upSample(dat_train %>%
+                           select(-Class),
+                         dat_train$Class)
+
+table(dat_train_up$Class)
+```
+# Type of dat_train_up  
+```{r}
+#typeof(dat_train_up)
+is.data.frame(dat_train_up)
+```
 
 
+# Looking at DownSampling numbers  
+```{r}
+dat_train_down <- downSample(dat_train %>%
+                           select(-Class),
+                         dat_train$Class)
 
+table(dat_train_down$Class)
+```
 
+# Examine train Upsampling  
+```{r}
+dat_train_up %>%
+  group_by(Class) %>%
+  count()
+```
+
+#Examine train DownSampling  
+```{r}
+dat_train_down %>%
+  group_by(Class) %>%
+  count()
+```
+
+# Cross Validation  & Model (Random Forest)  
+```{r}
+train_control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE)
+
+model_rf <- train(dat_train_up %>% select(-Class), dat_train_up$Class, method = 'ranger', trControl = train_control, na.action = na.exclude)
+
+model_rf
+```
+
+```{r}
+predictions <- predict(model_rf, newdata = dat_test, type = 'raw')
+actuals <- dat_test$Class
+confusionMatrix(predictions, actuals)
+```
+
+# Cross Validation  & Model (Logistic Regression)  
+
+```{r}
+train_control <- trainControl(method = 'cv', number = 5, allowParallel = TRUE)
+
+model_lr <- train(dat_train_up %>% select(-Class), dat_train_up$Class, method = "glm", family = "binomial", trControl = train_control)
+
+model_lr
+```
+
+```{r}
+predictions <- predict(model_lr, newdata = dat_test, type = 'raw')
+actuals <- dat_test$Class
+confusionMatrix(predictions, actuals)
+```
+
+# Cross Validation  & Model (Naive Bayes)  
+
+```{r}
+train_control = trainControl(method = 'cv', number = 10)
+
+model_nb = train(dat_train_up %>% select(-Class), dat_train_up$Class, method = 'naive_bayes')
+
+model_nb
+```
+
+```{r}
+predictions = predict(model_nb, newdata = dat_test)
+
+confusionMatrix(predictions, dat_test$Class)
+```
